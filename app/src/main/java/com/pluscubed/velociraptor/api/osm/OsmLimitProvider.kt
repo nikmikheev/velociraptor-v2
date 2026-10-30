@@ -37,17 +37,24 @@ class OsmLimitProvider(
     private val cacheLimitProvider: CacheLimitProvider
 ) : LimitProvider {
     private lateinit var endpoint: OsmApiEndpoint
+    private var httpClient: HttpClient? = null
+    private var activeBaseUrl: String? = null
 
-    private fun initializeOsmService() {
-        val client = buildHttpClient()
-        endpoint = OsmApiEndpoint(client, ENDPOINT_URL)
+    private fun ensureEndpoint() {
+        val baseUrl = endpointBaseUrl(PrefUtils.getOsmEndpointUrl(context))
+        if (baseUrl == activeBaseUrl && this::endpoint.isInitialized) return
+        httpClient?.close()
+        val client = buildHttpClient(baseUrl)
+        httpClient = client
+        endpoint = OsmApiEndpoint(client, baseUrl)
+        activeBaseUrl = baseUrl
     }
 
-    private fun buildHttpClient(): HttpClient {
+    private fun buildHttpClient(baseUrl: String): HttpClient {
         val client = HttpClient(CIO) {
             defaultRequest {
                 contentType(ContentType.Application.Json)
-                url(ENDPOINT_URL)
+                url(baseUrl)
                 header("User-Agent", "VelociraptorV2/${BuildConfig.VERSION_NAME}")
             }
             HttpResponseValidator {
@@ -117,6 +124,7 @@ class OsmLimitProvider(
             lastResponse: LimitResponse?,
             origin: Int
     ): List<LimitResponse> {
+        ensureEndpoint()
         val debuggingEnabled = PrefUtils.isDebuggingEnabled(context)
         var limitResponse = LimitResponse(
             timestamp = System.currentTimeMillis(),
@@ -247,12 +255,43 @@ class OsmLimitProvider(
     }
 
     companion object {
-        const val ENDPOINT_URL = "https://overpass.kumi.systems/api/"
         const val OSM_RADIUS = 15
         const val ROADNAME_DELIM = "`"
-    }
 
-    init {
-        initializeOsmService()
+        fun isValidEndpointUrl(raw: String): Boolean {
+            return try {
+                toBaseUrl(raw)
+                true
+            } catch (e: IllegalArgumentException) {
+                false
+            }
+        }
+
+        fun endpointBaseUrl(raw: String?): String {
+            val candidate = raw?.trim().orEmpty().ifEmpty { PrefUtils.DEFAULT_OSM_ENDPOINT_URL }
+            return try {
+                toBaseUrl(candidate)
+            } catch (e: IllegalArgumentException) {
+                toBaseUrl(PrefUtils.DEFAULT_OSM_ENDPOINT_URL)
+            }
+        }
+
+        private fun toBaseUrl(raw: String): String {
+            var url = raw.trim()
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                throw IllegalArgumentException()
+            }
+            url = url.trimEnd('/')
+            if (url.endsWith("/interpreter")) {
+                url = url.removeSuffix("/interpreter")
+            }
+            if (!url.endsWith("/")) {
+                url += "/"
+            }
+            if (Uri.parse(url).host.isNullOrBlank()) {
+                throw IllegalArgumentException()
+            }
+            return url
+        }
     }
 }

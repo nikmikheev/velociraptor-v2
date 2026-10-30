@@ -36,6 +36,8 @@ public abstract class PrefUtils {
     private static final String PREF_TERMS_ACCEPTED = "pref_terms_accepted";
     private static final String PREF_SUPPORTED = "pref_supported";
     private static final String PREF_ALL_MAP_APPS = "pref_all_map_apps";
+    private static final String PREF_OSM_ENDPOINT_URL = "pref_osm_endpoint_url";
+    public static final String DEFAULT_OSM_ENDPOINT_URL = "https://overpass.kumi.systems/api/interpreter";
 
     private static SharedPreferences.Editor edit(Context context) {
         return getSharedPreferences(context).edit();
@@ -214,6 +216,18 @@ public abstract class PrefUtils {
 
     public static void setAllMapApps(Context context, boolean appMapApps) {
         edit(context).putBoolean(PREF_SUPPORTED, appMapApps).apply();
+    }
+
+    public static String getOsmEndpointUrl(Context context) {
+        String url = getSharedPreferences(context).getString(PREF_OSM_ENDPOINT_URL, DEFAULT_OSM_ENDPOINT_URL);
+        if (url == null || url.trim().isEmpty()) {
+            return DEFAULT_OSM_ENDPOINT_URL;
+        }
+        return url.trim();
+    }
+
+    public static void setOsmEndpointUrl(Context context, String url) {
+        edit(context).putString(PREF_OSM_ENDPOINT_URL, url).apply();
     }
 
     @IntDef({STYLE_US, STYLE_INTERNATIONAL})

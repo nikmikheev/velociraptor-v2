@@ -6,13 +6,16 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.text.parseAsHtml
 import androidx.fragment.app.Fragment
 import com.google.android.gms.location.LocationServices
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.pluscubed.velociraptor.R
+import com.pluscubed.velociraptor.api.osm.OsmLimitProvider
 import com.pluscubed.velociraptor.databinding.FragmentProvidersBinding
+import com.pluscubed.velociraptor.utils.PrefUtils
 import com.pluscubed.velociraptor.utils.Utils
 import kotlinx.coroutines.*
 import java.util.*
@@ -57,9 +60,42 @@ class ProvidersFragment : Fragment() {
 
         binding.osmDonate.setOnClickListener { Utils.openLink(activity, view, OSM_DONATE_URL) }
 
+        binding.osmUrl.setText(PrefUtils.getOsmEndpointUrl(requireContext()))
+        binding.osmUrl.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveOsmUrl()
+        }
+        binding.osmUrl.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                saveOsmUrl()
+                binding.osmUrl.clearFocus()
+                true
+            } else {
+                false
+            }
+        }
+
         val checkIcon =
                 activity?.let { AppCompatResources.getDrawable(it, R.drawable.ic_done_green_20dp) }
         binding.osmTitle.setCompoundDrawablesWithIntrinsicBounds(null, null, checkIcon, null)
+    }
+
+    override fun onPause() {
+        if (_binding != null) saveOsmUrl()
+        super.onPause()
+    }
+
+    private fun saveOsmUrl() {
+        val raw = binding.osmUrl.text?.toString()?.trim().orEmpty()
+        val toStore = raw.ifEmpty { PrefUtils.DEFAULT_OSM_ENDPOINT_URL }
+        if (!OsmLimitProvider.isValidEndpointUrl(toStore)) {
+            binding.osmUrlLayout.error = getString(R.string.osm_endpoint_url_invalid)
+            return
+        }
+        binding.osmUrlLayout.error = null
+        if (raw.isEmpty()) {
+            binding.osmUrl.setText(toStore)
+        }
+        PrefUtils.setOsmEndpointUrl(requireContext(), toStore)
     }
 
     @SuppressLint("MissingPermission")
