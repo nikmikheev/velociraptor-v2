@@ -39,6 +39,8 @@ class OsmLimitProvider(
     private lateinit var endpoint: OsmApiEndpoint
     private var httpClient: HttpClient? = null
     private var activeBaseUrl: String? = null
+    private var lastExchange: String = ""
+    private val osmJson = Json { ignoreUnknownKeys = true }
 
     private fun ensureEndpoint() {
         val baseUrl = endpointBaseUrl(PrefUtils.getOsmEndpointUrl(context))
@@ -104,19 +106,29 @@ class OsmLimitProvider(
     }
 
     private fun getOsmResponse(location: Location): OsmResponse {
+        val query = buildQueryBody(location)
+        lastExchange = ""
         try {
-            val osmNetWorkResponse: OsmResponse
-            runBlocking {
-                osmNetWorkResponse = endpoint.getOsm(buildQueryBody(location))
-            }
+            val call = runBlocking { endpoint.getOsm(query) }
+            lastExchange = formatExchange(query, call.status, call.body)
             logOsmRequest(endpoint)
-            return osmNetWorkResponse
+            if (call.status !in 200..299) {
+                throw IOException("HTTP ${call.status}")
+            }
+            return osmJson.decodeFromString(call.body)
         } catch (e: Exception) {
-            //catch any errors, rethrow
+            if (lastExchange.isEmpty()) {
+                lastExchange = formatExchange(query, null, e.message.orEmpty())
+            }
             updateEndpointTimeTaken(Integer.MAX_VALUE, endpoint)
             logOsmError(endpoint, e)
             throw e
         }
+    }
+
+    private fun formatExchange(query: String, status: Int?, body: String): String {
+        val clipped = if (body.length > 400) body.take(400) + "…" else body
+        return "\nQuery: $query\nHTTP ${status ?: "none"}\nReply: $clipped"
     }
 
     override fun getSpeedLimit(
@@ -133,6 +145,11 @@ class OsmLimitProvider(
         )
         try {
             val osmResponse = getOsmResponse(location)
+            if (debuggingEnabled) {
+                limitResponse = limitResponse.copy(
+                    debugInfo = limitResponse.debugInfo + lastExchange
+                )
+            }
 
             val emptyObservableResponse = {
                 listOf(limitResponse.initDebugInfo(debuggingEnabled))
@@ -186,7 +203,10 @@ class OsmLimitProvider(
 
         } catch (e: Exception) {
             return listOf(
-                limitResponse.copy(error = e).initDebugInfo(debuggingEnabled)
+                limitResponse.copy(
+                    error = e,
+                    debugInfo = limitResponse.debugInfo + lastExchange
+                ).initDebugInfo(debuggingEnabled)
             )
         }
     }

@@ -1,10 +1,14 @@
 package com.pluscubed.velociraptor.api.osm
 
-import com.pluscubed.velociraptor.api.osm.data.OsmResponse
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+
+class OsmHttpResult(
+    val status: Int,
+    val body: String
+)
 
 class OsmApiEndpoint(
     private val client: HttpClient,
@@ -12,10 +16,11 @@ class OsmApiEndpoint(
 ) : Comparable<OsmApiEndpoint> {
     var timeTaken: Int = 0
 
-    suspend fun getOsm(data: String): OsmResponse {
-        return client.post("interpreter") {
+    suspend fun getOsm(data: String): OsmHttpResult {
+        val response = client.post("interpreter") {
             setBody(data)
-        }.body()
+        }
+        return OsmHttpResult(response.status.value, response.bodyAsText())
     }
 
     override fun toString(): String {
