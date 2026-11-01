@@ -30,5 +30,11 @@ jobs:
           
       - name: List build output
         run: |
-          cd app/build/outputs/apk/release/
-          ls
+          find app/build/outputs/apk -name '*.apk' -print
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: velociraptor-apk
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
